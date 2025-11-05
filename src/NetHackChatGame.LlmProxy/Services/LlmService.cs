@@ -6,12 +6,14 @@ using ModelContextProtocol.Client;
 using Microsoft.Extensions.AI;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 using OpenAI.Responses;
+using NetHackChatGame.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace NetHackChatGame.LlmProxy.Services;
 
 public class LlmService : ILlmService
 {
-    //private readonly NetHackDbContext _dbContext;
+    private readonly NetHackDbContext _dbContext;
     private readonly IToolExecutor _toolExecutor;
     private readonly ILlmConfigurationService _configService;
     private readonly ILogger<LlmService> _logger;
@@ -19,16 +21,14 @@ public class LlmService : ILlmService
     private McpClient? _mcpClient;
     private IChatClient? _chatClient;
 
-    static private Dictionary<Guid, ConversationEntity> conversationCache = new();
-
     public LlmService(
-        //NetHackDbContext dbContext,
+        NetHackDbContext dbContext,
         IToolExecutor toolExecutor,
         ILlmConfigurationService configService,
         ILogger<LlmService> logger,
         ILoggerFactory loggerFactory)
     {
-        //_dbContext = dbContext;
+        _dbContext = dbContext;
         _toolExecutor = toolExecutor;
         _configService = configService;
         _logger = logger;
@@ -107,34 +107,16 @@ public class LlmService : ILlmService
     public async Task<Models.ChatResponse> ProcessChatAsync(ChatRequest request, CancellationToken cancellationToken = default)
     {
         // Load conversation history
-        //var conversation = await _dbContext.Conversations
-        //    .Include(c => c.Messages)
-        //    .FirstOrDefaultAsync(c => c.Id == request.ConversationId, cancellationToken);
-
-        var conversation = conversationCache.GetValueOrDefault(request.ConversationId);
+        var conversation = await _dbContext.Conversations
+            .Include(c => c.Messages)
+            .FirstOrDefaultAsync(c => c.Id == request.ConversationId, cancellationToken);
 
         if (conversation == null)
         {
-            //throw new InvalidOperationException($"Conversation {request.ConversationId} not found");
-            conversation = new ConversationEntity
-            {
-                Id = request.ConversationId,
-                Messages = new List<MessageEntity>()
-            };
-            conversationCache.Add(request.ConversationId, conversation);
+            throw new InvalidOperationException($"Conversation {request.ConversationId} not found");
         }
 
         // Add user message to database
-        //var userMessage = new MessageEntity
-        //{
-        //    ConversationId = request.ConversationId,
-        //    Role = "user",
-        //    Content = request.UserMessage,
-        //    SequenceNumber = conversation.Messages.Count
-        //};
-        //_dbContext.Messages.Add(userMessage);
-        //await _dbContext.SaveChangesAsync(cancellationToken);
-
         var userMessage = new MessageEntity
         {
             ConversationId = request.ConversationId,
@@ -142,7 +124,8 @@ public class LlmService : ILlmService
             Content = request.UserMessage,
             SequenceNumber = conversation.Messages.Count
         };
-        conversation.Messages.Add(userMessage);
+        _dbContext.Messages.Add(userMessage);
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         // Build messages for LLM using Microsoft.Extensions.AI types
         var messages = new List<ChatMessage>();
@@ -193,15 +176,66 @@ public class LlmService : ILlmService
             chatOptions,
             cancellationToken);
 
-        if (completion.FinishReason == ChatFinishReason.ToolCalls)
+        // Handle tool calls if requested
+        while (completion.FinishReason == ChatFinishReason.ToolCalls)
         {
-            _logger.LogInformation("LLM requested tool call");
-            // Extract tool calls from the completion
-            var toolCallContent = (completion.Messages.FirstOrDefault()?.Contents.FirstOrDefault() as FunctionCallContent);
-            if (toolCallContent != null)
+            _logger.LogInformation("LLM requested tool call(s)");
+            
+            // Process all tool calls from the completion
+            foreach (var message in completion.Messages)
             {
-                var toolCallResult = await mcpClient.CallToolAsync(toolCallContent.Name, toolCallContent.Arguments.AsReadOnly());
+                // Add assistant's message with tool calls to conversation
+                messages.Add(message);
+
+                foreach (var content in message.Contents)
+                {
+                    if (content is FunctionCallContent toolCallContent)
+                    {
+                        _logger.LogInformation("Executing tool: {ToolName}", toolCallContent.Name);
+                        
+                        try
+                        {
+                            // Execute the tool via MCP
+                            var toolCallResult = await mcpClient.CallToolAsync(
+                                toolCallContent.Name, 
+                                toolCallContent.Arguments?.AsReadOnly() ?? new Dictionary<string, object?>().AsReadOnly());
+                            
+                            _logger.LogInformation("Tool {ToolName} executed successfully", toolCallContent.Name);
+                            
+                            // Add tool result to messages
+                            var resultContent = new FunctionResultContent(
+                                toolCallContent.CallId,
+                                toolCallContent.Name)
+                            {
+                                Result = toolCallResult
+                            };
+                            
+                            messages.Add(new ChatMessage(ChatRole.Tool, [resultContent]));
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Error executing tool {ToolName}", toolCallContent.Name);
+                            
+                            // Add error result to messages
+                            var errorContent = new FunctionResultContent(
+                                toolCallContent.CallId,
+                                toolCallContent.Name)
+                            {
+                                Result = $"Error executing tool: {ex.Message}"
+                            };
+                            
+                            messages.Add(new ChatMessage(ChatRole.Tool, [errorContent]));
+                        }
+                    }
+                }
             }
+            
+            // Send tool results back to LLM for final response
+            _logger.LogInformation("Sending tool results back to LLM");
+            completion = await chatClient.GetResponseAsync(
+                messages,
+                chatOptions,
+                cancellationToken);
         }
 
         var assistantContent = completion.Text ?? string.Empty;
@@ -214,9 +248,8 @@ public class LlmService : ILlmService
             Content = assistantContent,
             SequenceNumber = conversation.Messages.Count + 1
         };
-        //_dbContext.Messages.Add(finalMessage);
-        //await _dbContext.SaveChangesAsync(cancellationToken);
-        conversation.Messages.Add(finalMessage);
+        _dbContext.Messages.Add(finalMessage);
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
         return new Models.ChatResponse
         {

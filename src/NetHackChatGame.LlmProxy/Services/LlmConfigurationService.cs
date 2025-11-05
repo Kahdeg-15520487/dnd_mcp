@@ -24,7 +24,7 @@ public class LlmConfigurationService : ILlmConfigurationService
             MCPEndpoint = _appConfiguration["MCP:Endpoint"],
         };
 
-        _logger.LogInformation("LLM Configuration initialized: Model={0}, Endpoint={1}, HasApiKey={2}, MCPEndpoint={3}",
+        _logger.LogInformation("LLM Configuration initialized: Model={0}, Endpoint={1}, HasApiKey={2}, MCP Endpoint={3}",
                 _configuration.Model, _configuration.Endpoint ?? "default", !string.IsNullOrEmpty(_configuration.ApiKey), _configuration.MCPEndpoint);
     }
 
@@ -83,6 +83,9 @@ public class LlmConfigurationService : ILlmConfigurationService
         {
             status = "Not configured (will fail on requests)";
         }
+        _logger.LogInformation("endpoint: |" + _appConfiguration["OpenAI:Endpoint"] + "|");
+        _logger.LogInformation("LLM Configuration initialized: Model={0}, Endpoint={1}, HasApiKey={2}, MCP Endpoint={3}",
+                _configuration.Model, _configuration.Endpoint ?? "default", !string.IsNullOrEmpty(_configuration.ApiKey), _configuration.MCPEndpoint);
 
         return new LlmConfigurationResponse
         {
@@ -92,6 +95,7 @@ public class LlmConfigurationService : ILlmConfigurationService
             MaxTokens = _configuration.MaxTokens,
             HasApiKey = hasApiKey,
             Status = status,
+            MCPEndpoint = _configuration.MCPEndpoint,
         };
     }
 }

@@ -73,12 +73,38 @@ public class ConversationController : ControllerBase
             return NotFound(new { message = "Conversation not found" });
         }
 
-        var response = new ConversationResponse(
+        var messages = conversation.Messages
+            .OrderBy(m => m.SequenceNumber)
+            .Select(m => new MessageResponse(
+                m.Id,
+                m.Role,
+                m.Content,
+                m.ToolCalls,
+                m.ToolResults,
+                m.CreatedAt,
+                m.SequenceNumber
+            ))
+            .ToList();
+
+        var gameSnapshots = conversation.GameSnapshots
+            .OrderBy(gs => gs.CreatedAt)
+            .Select(gs => new GameSnapshotResponse(
+                gs.Id,
+                gs.MessageId,
+                gs.GameStateJson,
+                gs.CreatedAt
+            ))
+            .ToList();
+
+        var response = new ConversationDetailResponse(
             conversation.Id,
+            conversation.UserId,
             conversation.PlayerName,
             conversation.StartedAt,
             conversation.LastMessageAt,
-            conversation.IsActive
+            conversation.IsActive,
+            messages,
+            gameSnapshots
         );
 
         return Ok(response);

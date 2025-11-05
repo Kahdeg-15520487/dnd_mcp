@@ -34,12 +34,11 @@ services:
       dockerfile: src/NetHackChatGame.McpServer/Dockerfile
     container_name: nethack-mcp-server
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
-      ASPNETCORE_URLS: http://+:5002
+      ASPNETCORE_URLS: http://+:80
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-nethack_chat};Username=${POSTGRES_USER:-nethack_user};Password=${POSTGRES_PASSWORD:-changeme}"
       Logging__LogLevel__Default: ${LOG_LEVEL:-Information}
     ports:
-      - "8503:5002"
+      - "8503:80"
     networks:
       - nethack-network
     depends_on:
@@ -47,7 +46,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -61,12 +60,11 @@ services:
       dockerfile: src/NetHackChatGame.AuthService/Dockerfile
     container_name: nethack-auth-service
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
-      ASPNETCORE_URLS: http://+:5003
+      ASPNETCORE_URLS: http://+:80
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-nethack_chat};Username=${POSTGRES_USER:-nethack_user};Password=${POSTGRES_PASSWORD:-changeme}"
       Logging__LogLevel__Default: ${LOG_LEVEL:-Information}
     ports:
-      - "8504:5003"
+      - "8504:80"
     networks:
       - nethack-network
     depends_on:
@@ -74,7 +72,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5003/health"]
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -88,18 +86,17 @@ services:
       dockerfile: src/NetHackChatGame.LlmProxy/Dockerfile
     container_name: nethack-llm-proxy
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
-      ASPNETCORE_URLS: http://+:5001
+      ASPNETCORE_URLS: http://+:80
       ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-nethack_chat};Username=${POSTGRES_USER:-nethack_user};Password=${POSTGRES_PASSWORD:-changeme}"
-      OpenAI__Endpoint: ${OPENAI_API_ENDPOINT}
-      OpenAI__ApiKey: ${OPENAI_API_KEY}
+      OpenAI__Endpoint: ${OPENAI_API_ENDPOINT:-http://host.docker.internal:8080}
+      OpenAI__ApiKey: ${OPENAI_API_KEY:-not-needed}
       OpenAI__Model: ${OPENAI_MODEL:-gpt-4}
       OpenAI__MaxTokens: ${OPENAI_MAX_TOKENS:-2000}
       OpenAI__Temperature: ${OPENAI_TEMPERATURE:-0.7}
       McpServer__Url: http://mcp-server:5002
       Logging__LogLevel__Default: ${LOG_LEVEL:-Information}
     ports:
-      - "8502:5001"
+      - "8502:80"
     networks:
       - nethack-network
     depends_on:
@@ -107,7 +104,7 @@ services:
       - mcp-server
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -121,20 +118,19 @@ services:
       dockerfile: src/NetHackChatGame.SignalRApi/Dockerfile
     container_name: nethack-signalr-api
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
-      ASPNETCORE_URLS: http://+:5000
-      LlmProxy__Url: http://llm-proxy:5001
+      ASPNETCORE_URLS: http://+:80
+      LlmProxy__Url: http://llm-proxy
       CORS__AllowedOrigins: ${ALLOWED_ORIGINS:-http://localhost:8500}
       Logging__LogLevel__Default: ${LOG_LEVEL:-Information}
     ports:
-      - "8501:5000"
+      - "8501:80"
     networks:
       - nethack-network
     depends_on:
       - llm-proxy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
       interval: 30s
       timeout: 10s
       retries: 3
