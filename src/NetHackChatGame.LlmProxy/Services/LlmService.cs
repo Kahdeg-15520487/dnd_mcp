@@ -18,7 +18,7 @@ public class LlmService : ILlmService
     private McpClient? _mcpClient;
     private IChatClient? _chatClient;
 
-    private Dictionary<Guid, ConversationEntity> conversationCache = new();
+    static private Dictionary<Guid, ConversationEntity> conversationCache = new();
 
     public LlmService(
         //NetHackDbContext dbContext,
