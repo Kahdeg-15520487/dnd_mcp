@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Configuration - NetHack Chat Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #00ff00;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #0a0a0a;
+            border: 2px solid #00ff00;
+            padding: 30px;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+        }
+
+        h1 {
+            color: #00ff00;
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #004400;
+            background: #0d0d0d;
+        }
+
+        .section h2 {
+            color: #00dd00;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #004400;
+            padding-bottom: 10px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #00cc00;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            background: #000;
+            border: 1px solid #00ff00;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #00ff00;
+            box-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+        }
+
+        button {
+            background: #004400;
+            color: #00ff00;
+            border: 2px solid #00ff00;
+            padding: 12px 24px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            margin-right: 10px;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #006600;
+            box-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status {
+            padding: 15px;
+            background: #001100;
+            border-left: 4px solid #00ff00;
+            margin-bottom: 20px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+        }
+
+        .status-label {
+            color: #00cc00;
+        }
+
+        .status-value {
+            color: #00ff00;
+            font-weight: bold;
+        }
+
+        .message {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-left: 4px solid;
+        }
+
+        .message.success {
+            background: #001100;
+            border-color: #00ff00;
+        }
+
+        .message.error {
+            background: #110000;
+            border-color: #ff0000;
+            color: #ff4444;
+        }
+
+        .message.info {
+            background: #001122;
+            border-color: #0088ff;
+            color: #4499ff;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: #00ff00;
+            text-decoration: none;
+            border: 1px solid #00ff00;
+            padding: 10px 20px;
+        }
+
+        .back-link:hover {
+            background: #004400;
+        }
+
+        .help-text {
+            color: #008800;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .preset-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .preset-buttons button {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚙️ LLM Configuration</h1>
+
+        <div class="section">
+            <h2>📊 Current Status</h2>
+            <div id="status" class="status">
+                <div class="status-item">
+                    <span class="status-label">Status:</span>
+                    <span class="status-value" id="status-text">Loading...</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Model:</span>
+                    <span class="status-value" id="status-model">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Endpoint:</span>
+                    <span class="status-value" id="status-endpoint">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Temperature:</span>
+                    <span class="status-value" id="status-temperature">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Max Tokens:</span>
+                    <span class="status-value" id="status-max-tokens">-</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Has API Key:</span>
+                    <span class="status-value" id="status-has-key">-</span>
+                </div>
+            </div>
+            <button onclick="loadStatus()">🔄 Refresh Status</button>
+        </div>
+
+        <div class="section">
+            <h2>⚡ Quick Presets</h2>
+            <div class="preset-buttons">
+                <button onclick="setPreset('openai')">OpenAI GPT-4</button>
+                <button onclick="setPreset('ollama')">Local Ollama</button>
+                <button onclick="setPreset('azure')">Azure OpenAI</button>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🔧 Configuration</h2>
+            <div id="messages"></div>
+
+            <form id="config-form" onsubmit="updateConfig(event)">
+                <div class="form-group">
+                    <label for="endpoint">Endpoint URL (leave empty for OpenAI)</label>
+                    <input type="text" id="endpoint" placeholder="http://localhost:11434/v1" />
+                    <div class="help-text">For Ollama: http://localhost:11434/v1 | For Azure: https://your-resource.openai.azure.com</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="model">Model Name</label>
+                    <input type="text" id="model" placeholder="gpt-4o-mini" required />
+                    <div class="help-text">Examples: gpt-4o-mini, llama3.2, gpt-4</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="api-key">API Key (optional for local servers)</label>
+                    <input type="password" id="api-key" placeholder="sk-..." />
+                    <div class="help-text">Required for OpenAI and Azure. Not needed for local Ollama.</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="temperature">Temperature (0.0 - 2.0)</label>
+                    <input type="number" id="temperature" step="0.1" min="0" max="2" value="0.7" required />
+                    <div class="help-text">Higher = more creative, Lower = more focused</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="max-tokens">Max Tokens</label>
+                    <input type="number" id="max-tokens" min="100" max="128000" value="2000" required />
+                    <div class="help-text">Maximum response length</div>
+                </div>
+
+                <button type="submit">💾 Save Configuration</button>
+                <button type="button" onclick="testConfig()">🧪 Test Configuration</button>
+            </form>
+        </div>
+
+        <a href="index.html" class="back-link">← Back to Game</a>
+    </div>
+
+    <script>
+        const LLM_PROXY_URL = 'http://localhost:8502';
+
+        async function loadStatus() {
+            try {
+                const response = await fetch(`${LLM_PROXY_URL}/api/configuration`);
+                const data = await response.json();
+
+                document.getElementById('status-text').textContent = data.status;
+                document.getElementById('status-model').textContent = data.model;
+                document.getElementById('status-endpoint').textContent = data.endpoint || 'Default (OpenAI)';
+                document.getElementById('status-temperature').textContent = data.temperature;
+                document.getElementById('status-max-tokens').textContent = data.maxTokens;
+                document.getElementById('status-has-key').textContent = data.hasApiKey ? '✓ Yes' : '✗ No';
+
+                // Update form fields
+                document.getElementById('endpoint').value = data.endpoint || '';
+                document.getElementById('model').value = data.model;
+                document.getElementById('temperature').value = data.temperature;
+                document.getElementById('max-tokens').value = data.maxTokens;
+            } catch (error) {
+                showMessage('Failed to load configuration: ' + error.message, 'error');
+            }
+        }
+
+        async function updateConfig(event) {
+            event.preventDefault();
+
+            const config = {
+                endpoint: document.getElementById('endpoint').value || null,
+                model: document.getElementById('model').value,
+                apiKey: document.getElementById('api-key').value || null,
+                temperature: parseFloat(document.getElementById('temperature').value),
+                maxTokens: parseInt(document.getElementById('max-tokens').value)
+            };
+
+            try {
+                const response = await fetch(`${LLM_PROXY_URL}/api/configuration`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage('✓ Configuration updated successfully!', 'success');
+                    loadStatus();
+                    // Clear API key field after successful update
+                    document.getElementById('api-key').value = '';
+                } else {
+                    showMessage('✗ Failed to update: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showMessage('✗ Error: ' + error.message, 'error');
+            }
+        }
+
+        async function testConfig() {
+            try {
+                showMessage('⏳ Testing configuration...', 'info');
+                const response = await fetch(`${LLM_PROXY_URL}/api/configuration/test`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage('✓ Configuration test passed!', 'success');
+                } else {
+                    showMessage('✗ Configuration test failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                showMessage('✗ Test error: ' + error.message, 'error');
+            }
+        }
+
+        function setPreset(type) {
+            switch (type) {
+                case 'openai':
+                    document.getElementById('endpoint').value = '';
+                    document.getElementById('model').value = 'gpt-4o-mini';
+                    showMessage('ℹ️ Preset: OpenAI GPT-4 - Don\'t forget to set your API key!', 'info');
+                    break;
+                case 'ollama':
+                    document.getElementById('endpoint').value = 'http://localhost:11434/v1';
+                    document.getElementById('model').value = 'llama3.2';
+                    document.getElementById('api-key').value = '';
+                    showMessage('ℹ️ Preset: Local Ollama - Make sure Ollama is running!', 'info');
+                    break;
+                case 'azure':
+                    document.getElementById('endpoint').value = 'https://your-resource.openai.azure.com';
+                    document.getElementById('model').value = 'gpt-4';
+                    showMessage('ℹ️ Preset: Azure OpenAI - Update endpoint and add your API key!', 'info');
+                    break;
+            }
+        }
+
+        function showMessage(text, type) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = text;
+            messagesDiv.innerHTML = '';
+            messagesDiv.appendChild(messageDiv);
+
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                messageDiv.remove();
+            }, 5000);
+        }
+
+        // Load status on page load
+        loadStatus();
+    </script>
+</body>
+</html>

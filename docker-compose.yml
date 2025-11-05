@@ -1,0 +1,177 @@
+version: '3.8'
+
+services:
+  # ========================================
+  # PostgreSQL Database
+  # ========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: nethack-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nethack_chat}
+      POSTGRES_USER: ${POSTGRES_USER:-nethack_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"  # Temporarily exposed for migrations
+    networks:
+      - nethack-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-nethack_user} -d ${POSTGRES_DB:-nethack_chat}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ========================================
+  # MCP Server (Game Logic)
+  # ========================================
+  mcp-server:
+    build:
+      context: .
+      dockerfile: src/NetHackChatGame.McpServer/Dockerfile
+    container_name: nethack-mcp-server
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:5002
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-nethack_chat};Username=${POSTGRES_USER:-nethack_user};Password=${POSTGRES_PASSWORD:-changeme}"
+      Logging__LogLevel__Default: ${LOG_LEVEL:-Information}
+    ports:
+      - "8503:5002"
+    networks:
+      - nethack-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========================================
+  # Auth Service (User Management)
+  # ========================================
+  auth-service:
+    build:
+      context: .
+      dockerfile: src/NetHackChatGame.AuthService/Dockerfile
+    container_name: nethack-auth-service
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:5003
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-nethack_chat};Username=${POSTGRES_USER:-nethack_user};Password=${POSTGRES_PASSWORD:-changeme}"
+      Logging__LogLevel__Default: ${LOG_LEVEL:-Information}
+    ports:
+      - "8504:5003"
+    networks:
+      - nethack-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========================================
+  # LLM Proxy Service
+  # ========================================
+  llm-proxy:
+    build:
+      context: .
+      dockerfile: src/NetHackChatGame.LlmProxy/Dockerfile
+    container_name: nethack-llm-proxy
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:5001
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-nethack_chat};Username=${POSTGRES_USER:-nethack_user};Password=${POSTGRES_PASSWORD:-changeme}"
+      OpenAI__Endpoint: ${OPENAI_API_ENDPOINT}
+      OpenAI__ApiKey: ${OPENAI_API_KEY}
+      OpenAI__Model: ${OPENAI_MODEL:-gpt-4}
+      OpenAI__MaxTokens: ${OPENAI_MAX_TOKENS:-2000}
+      OpenAI__Temperature: ${OPENAI_TEMPERATURE:-0.7}
+      McpServer__Url: http://mcp-server:5002
+      Logging__LogLevel__Default: ${LOG_LEVEL:-Information}
+    ports:
+      - "8502:5001"
+    networks:
+      - nethack-network
+    depends_on:
+      - postgres
+      - mcp-server
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========================================
+  # SignalR API (WebSocket Server)
+  # ========================================
+  signalr-api:
+    build:
+      context: .
+      dockerfile: src/NetHackChatGame.SignalRApi/Dockerfile
+    container_name: nethack-signalr-api
+    environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: http://+:5000
+      LlmProxy__Url: http://llm-proxy:5001
+      CORS__AllowedOrigins: ${ALLOWED_ORIGINS:-http://localhost:8500}
+      Logging__LogLevel__Default: ${LOG_LEVEL:-Information}
+    ports:
+      - "8501:5000"
+    networks:
+      - nethack-network
+    depends_on:
+      - llm-proxy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ========================================
+  # Web Client (Static Files Server)
+  # ========================================
+  web-client:
+    image: nginx:alpine
+    container_name: nethack-web-client
+    volumes:
+      - ./client:/usr/share/nginx/html:ro
+    ports:
+      - "8500:80"
+    networks:
+      - nethack-network
+    depends_on:
+      - signalr-api
+      - auth-service
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/index.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ========================================
+# Networks
+# ========================================
+networks:
+  nethack-network:
+    driver: bridge
+    name: nethack-network
+
+# ========================================
+# Volumes
+# ========================================
+volumes:
+  postgres_data:
+    name: nethack_postgres_data

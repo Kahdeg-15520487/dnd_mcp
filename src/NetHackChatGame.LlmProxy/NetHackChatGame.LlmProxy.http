@@ -1,0 +1,30 @@
+@NetHackChatGame.LlmProxy_HostAddress = http://localhost:5294
+
+GET {{NetHackChatGame.LlmProxy_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
+
+# Chat API - Send a message
+POST {{NetHackChatGame.LlmProxy_HostAddress}}/api/chat
+Content-Type: application/json
+
+{
+  "conversationId": "4342f596-7a3d-4ed0-a3b1-08afcb45b0bc",
+  "message": "What is in this room?",
+  "userId": "4342f596-7a3d-4ed0-a3b1-08afcb45b0bc"
+}
+
+###
+
+# Chat API - Game action request
+POST {{NetHackChatGame.LlmProxy_HostAddress}}/api/chat
+Content-Type: application/json
+
+{
+  "conversationId": "test-conversation-123",
+  "message": "I want to move north",
+  "userId": "user-456"
+}
+
+###
