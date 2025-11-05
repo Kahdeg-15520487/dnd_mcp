@@ -1,15 +1,9 @@
-using System.Text;
-using System.Text.Json;
 using System.ClientModel;
-using NetHackChatGame.Data;
 using NetHackChatGame.Data.Entities;
 using NetHackChatGame.LlmProxy.Models;
-using Microsoft.EntityFrameworkCore;
 using OpenAI;
 using ModelContextProtocol.Client;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
 namespace NetHackChatGame.LlmProxy.Services;
@@ -95,7 +89,7 @@ public class LlmService : ILlmService
         }
 
         // Convert OpenAI ChatClient to IChatClient
-        _chatClient = openAIClient.AsChatClient(config.Model);
+        _chatClient = Microsoft.Extensions.AI.OpenAIClientExtensions.AsIChatClient(openAIClient.GetChatClient(config.Model));
 
         return _chatClient;
     }

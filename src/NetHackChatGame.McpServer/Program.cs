@@ -1,8 +1,5 @@
 using Microsoft.EntityFrameworkCore;
-using ModelContextProtocol;
-using ModelContextProtocol.Server;
 using NetHackChatGame.Data;
-// using NetHackChatGame.McpServer.Mcp;
 using NetHackChatGame.McpServer.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,10 +7,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddMcpServer()
     .WithHttpTransport()
-    .WithTools<EchoTool>()
-    .WithTools<SampleLlmTool>()
-    .WithTools<WeatherTools>()
-    .WithResources<SimpleResourceType>();
+    .WithToolsFromAssembly();
 
 // Add services to the container
 builder.Services.AddControllers();
@@ -70,7 +64,6 @@ app.UseCors("AllowAll");
 app.UseHttpsRedirection();
 app.MapControllers();
 
-// TODO: Map MCP endpoints once SDK is properly configured
 app.MapMcp();
 
 // Health check endpoint
