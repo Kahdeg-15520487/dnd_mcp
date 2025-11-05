@@ -5,6 +5,7 @@ using OpenAI;
 using ModelContextProtocol.Client;
 using Microsoft.Extensions.AI;
 using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
+using OpenAI.Responses;
 
 namespace NetHackChatGame.LlmProxy.Services;
 
@@ -41,8 +42,11 @@ public class LlmService : ILlmService
             return _mcpClient;
         }
 
-        // Create HttpClient for MCP transport
-        var httpClient = new HttpClient();
+        // Create HttpClient for MCP transport with increased timeout
+        var httpClient = new HttpClient
+        {
+            Timeout = TimeSpan.FromMinutes(5) // 5 minute timeout for LLM responses
+        };
 
         // Create MCP transport to connect to MCP server
         _logger.LogInformation(config.MCPEndpoint);
@@ -68,24 +72,30 @@ public class LlmService : ILlmService
         }
 
         OpenAIClient openAIClient;
+        var openAIOptions = new OpenAIClientOptions
+        {
+            NetworkTimeout = TimeSpan.FromMinutes(5) // 5 minute timeout for LLM responses
+        };
+
         if (!string.IsNullOrEmpty(config.Endpoint))
         {
             // Use custom endpoint (e.g., Ollama, Azure OpenAI)
             var apiKey = config.ApiKey ?? "not-needed";
-            openAIClient = new OpenAIClient(new ApiKeyCredential(apiKey), new OpenAIClientOptions { Endpoint = new Uri(config.Endpoint) });
+            openAIOptions.Endpoint = new Uri(config.Endpoint);
+            openAIClient = new OpenAIClient(new ApiKeyCredential(apiKey), openAIOptions);
             _logger.LogInformation("Using custom endpoint: {Endpoint}", config.Endpoint);
         }
         else if (!string.IsNullOrEmpty(config.ApiKey))
         {
             // Use OpenAI with API key
-            openAIClient = new OpenAIClient(config.ApiKey);
+            openAIClient = new OpenAIClient(new ApiKeyCredential(config.ApiKey), openAIOptions);
             _logger.LogInformation("Using OpenAI API");
         }
         else
         {
             // Default to unauthenticated (for local LLM servers like Ollama)
             _logger.LogWarning("No OpenAI API key or endpoint configured");
-            openAIClient = new OpenAIClient(new ApiKeyCredential("not-needed"));
+            openAIClient = new OpenAIClient(new ApiKeyCredential("not-needed"), openAIOptions);
         }
 
         // Convert OpenAI ChatClient to IChatClient
@@ -182,6 +192,17 @@ public class LlmService : ILlmService
             messages,
             chatOptions,
             cancellationToken);
+
+        if (completion.FinishReason == ChatFinishReason.ToolCalls)
+        {
+            _logger.LogInformation("LLM requested tool call");
+            // Extract tool calls from the completion
+            var toolCallContent = (completion.Messages.FirstOrDefault()?.Contents.FirstOrDefault() as FunctionCallContent);
+            if (toolCallContent != null)
+            {
+                var toolCallResult = await mcpClient.CallToolAsync(toolCallContent.Name, toolCallContent.Arguments.AsReadOnly());
+            }
+        }
 
         var assistantContent = completion.Text ?? string.Empty;
 

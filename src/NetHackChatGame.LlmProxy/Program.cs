@@ -4,12 +4,23 @@ using NetHackChatGame.LlmProxy.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Configure Kestrel to allow longer request timeouts
+builder.WebHost.ConfigureKestrel(serverOptions =>
+{
+    serverOptions.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(5);
+    serverOptions.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(5);
+});
+
 // Add DbContext
 builder.Services.AddDbContext<NetHackDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 // Add HttpClient for tool executor (MCP server calls)
-builder.Services.AddHttpClient<IToolExecutor, ToolExecutor>();
+builder.Services.AddHttpClient<IToolExecutor, ToolExecutor>()
+    .ConfigureHttpClient(client =>
+    {
+        client.Timeout = TimeSpan.FromMinutes(5); // Increase timeout to 5 minutes
+    });
 
 // Add services
 builder.Services.AddSingleton<ILlmConfigurationService, LlmConfigurationService>();
